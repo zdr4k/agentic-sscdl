@@ -1,0 +1,7 @@
+# Anyone touching what the MCP server exposes to the agent needs a
+# security-aware human to look at it.
+/mcp/ @zdr4k
+
+# Same logic for the pipeline itself: nobody should be able to
+# quietly weaken a security check by editing the workflow that runs it.
+/.github/ @zdr4k
