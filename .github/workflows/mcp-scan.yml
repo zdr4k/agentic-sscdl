@@ -1,0 +1,39 @@
+name: "DAST: Snyk Agent Scan"
+
+on:
+  pull_request:
+    paths:
+      - "mcp/**"
+
+permissions: {}
+
+jobs:
+  agent-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Seed the database
+        run: python mcp/seed_db.py
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+
+      - name: Run Snyk Agent Scan
+        run: |
+          uvx snyk-agent-scan@latest --ci \
+            --dangerously-run-mcp-servers \
+            ./mcp-scan-config.json
