@@ -1,0 +1,42 @@
+name: "SAST: Snyk Code"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**.py"
+
+permissions: {}
+
+jobs:
+  snyk-code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Snyk CLI
+        uses: snyk/actions/setup@12140f4059e244892ae643824a95459a102120dd # master, pinned 2026-09-19
+
+      - name: Run Snyk Code
+        # Same reason as the SCA workflow: Snyk fails the step on
+        # finding something, which would skip the SARIF upload
+        # right after it.
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --sarif-file-output=snyk-code.sarif
+
+      - name: Upload results to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          sarif_file: snyk-code.sarif
+          # Distinguishes this from the SCA workflow's upload, both
+          # report as "Snyk" internally otherwise and one can
+          # overwrite the other's alerts.
+          category: snyk-code
