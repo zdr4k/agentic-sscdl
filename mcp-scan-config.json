@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "it-helpdesk": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["mcp/server.py"]
+    }
+  }
+}
