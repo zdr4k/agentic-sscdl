@@ -4,15 +4,14 @@ on:
   pull_request:
     paths:
       - "mcp/**"
-      - "promptfooconfig.yaml"
 
-permissions: {}
+permissions:
+  contents: read
+  models: read
 
 jobs:
   promptfoo:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -24,19 +23,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
       - name: Seed the database
         run: python scripts/create_db.py
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "20"
+          node-version: "22"
 
-      - name: Run promptfoo against the MCP server
-        # promptfoo exits 100 on any failed assertion, no continue-on-error
-        # trick needed here: there's no SARIF upload after it, this job's
-        # own pass/fail is the whole signal.
-        run: npx --yes promptfoo@latest eval -c promptfooconfig.yaml
+      - name: Run promptfoo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_BACKEND: github
+        run: npx -y promptfoo@latest eval -c promptfooconfig.yaml --no-cache
