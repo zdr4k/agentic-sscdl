@@ -36,6 +36,25 @@ jobs:
       - name: Seed the database
         run: python scripts/create_db.py
 
+      - name: Pin the MCP server command to this job's python
+        # uvx runs snyk-agent-scan inside its own short-lived, isolated
+        # venv. When that process spawns the MCP server via a bare
+        # "python" (PATH lookup), it resolves to uvx's venv, not the
+        # one where fastmcp was just installed above. Rewriting the
+        # config to an absolute interpreter path sidesteps PATH
+        # entirely, so it can't get shadowed either way.
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          config_path = pathlib.Path("mcp-scan-config.json")
+          config = json.loads(config_path.read_text())
+          config["mcpServers"]["it-helpdesk"]["command"] = sys.executable
+          config_path.write_text(json.dumps(config, indent=2) + "\n")
+          PY
+
       - name: Set up uv
         uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
 
