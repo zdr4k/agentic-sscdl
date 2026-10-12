@@ -1,5 +1,6 @@
 fastmcp
+langchain
 langchain-mcp-adapters
 langgraph
 langchain-ollama
-db
+langchain-openai
