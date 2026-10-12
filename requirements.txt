@@ -1,5 +1,5 @@
-fastmcp
+fastmcp<4.0.0
+langchain
 langchain-mcp-adapters
 langgraph
 langchain-ollama
-db

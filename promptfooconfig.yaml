@@ -1,0 +1,62 @@
+description: >
+  DAST against the IT helpdesk MCP server's tools directly, no LLM in the
+  loop. search_tickets builds its query with an f-string, so these are the
+  payloads that distinguish "it works on a real ticket number" from "it's
+  safe": boolean tautologies, UNION-based schema enumeration, and comment
+  truncation, each paired with a control case that confirms the tool still
+  works normally.
+
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        command: python
+        args: ["mcp/server.py"]
+        name: it-helpdesk
+
+prompts:
+  - "{{prompt}}"
+
+tests:
+  - description: "control: a real keyword still returns the matching ticket"
+    vars:
+      prompt: '{"tool": "search_tickets", "args": {"keyword": "VPN"}}'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "JSON.parse(output).length === 1"
+
+  - description: "control: a keyword that matches nothing returns nothing"
+    vars:
+      prompt: '{"tool": "search_tickets", "args": {"keyword": "nonexistent-keyword-zzz"}}'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "JSON.parse(output).length === 0"
+
+  - description: "boolean tautology should not return every ticket"
+    vars:
+      prompt: '{"tool": "search_tickets", "args": {"keyword": "'' OR ''1''=''1"}}'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "JSON.parse(output).length === 0"
+
+  - description: "UNION-based schema enumeration should not leak sqlite_master"
+    vars:
+      prompt: '{"tool": "search_tickets", "args": {"keyword": "'' UNION SELECT name,name,name,name FROM sqlite_master--"}}'
+    assert:
+      - type: not-contains
+        value: "sqlite_master"
+      - type: is-json
+      - type: javascript
+        value: "JSON.parse(output).length === 0"
+
+  - description: "comment truncation should not short-circuit the WHERE clause"
+    vars:
+      prompt: '{"tool": "search_tickets", "args": {"keyword": "x''--"}}'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: "JSON.parse(output).length === 0"

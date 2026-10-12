@@ -1,0 +1,51 @@
+name: "DAST: promptfoo"
+
+on:
+  pull_request:
+    paths:
+      - "mcp/**"
+      - "promptfooconfig.yaml"
+
+permissions: {}
+
+jobs:
+  tool:
+    name: attack the MCP tool directly
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Seed the database
+        run: python scripts/create_db.py
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      - name: Run promptfoo against the MCP server
+        # promptfoo exits 100 on any failed assertion, no continue-on-error
+        # trick needed here: there's no SARIF upload after it, this job's
+        # own pass/fail is the whole signal.
+        run: npx -y promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+
+# There used to be a second job here that red-teamed the live agent in CI,
+# using GitHub Models so the job's own GITHUB_TOKEN could stand in for an
+# API key. GitHub Models was retired on 2026-07-30, that endpoint now
+# returns a bare "OK" for every request, no error, no explanation. Running
+# a 7B model on the runner's CPU instead would cost minutes per PR for a
+# signal that's non-deterministic by nature, see promptfoo.agent.yaml and
+# agent/redteam_provider.py, kept as a local-only tool instead.

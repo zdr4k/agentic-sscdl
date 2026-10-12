@@ -1,14 +1,12 @@
 """IT helpdesk agent.
 
 Spawns the MCP server as a subprocess over stdio, loads its tools,
-and wires them into a LangGraph ReAct agent backed by a local Ollama
-model. No API key needed; anyone cloning the repo can run it.
+and wires them into a LangGraph ReAct agent. Backed by a local
+Ollama model, no API key needed, so anyone cloning the repo can run
+it.
 
 Requires Ollama running locally with the model pulled:
     ollama pull qwen2.5:7b-instruct
-
-Can be run from anywhere; the MCP server path is resolved relative
-to this file, not to the caller's current working directory.
     python agent.py
 """
 
@@ -16,9 +14,9 @@ import asyncio
 import pathlib
 import sys
 
+from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
-from langgraph.prebuilt import create_react_agent
 
 OLLAMA_MODEL = "qwen2.5:7b-instruct"
 
@@ -37,7 +35,15 @@ def build_model() -> ChatOllama:
     return ChatOllama(model=OLLAMA_MODEL, temperature=0)
 
 
-async def main() -> None:
+async def build_agent():
+    """Construct the agent once: spawns the MCP server, loads its
+    tools, and wires everything into a LangGraph ReAct agent.
+
+    Split out from main() so anything else that needs to send a
+    prompt through this exact agent, a test script, a red-team
+    target, a notebook, can reuse it instead of re-implementing the
+    setup.
+    """
     # This spawns server/server.py as a child process. The agent
     # only ever "sees" the tool schemas the server exposes, not the
     # server's source code, which matters later when we start
@@ -52,18 +58,28 @@ async def main() -> None:
         }
     )
     tools = await client.get_tools()
+    return create_agent(build_model(), tools, system_prompt=SYSTEM_PROMPT)
 
-    agent = create_react_agent(build_model(), tools, prompt=SYSTEM_PROMPT)
+
+async def ask(agent, query: str) -> str:
+    """Send one query through the agent and return its text reply."""
+    result = await agent.ainvoke({"messages": [{"role": "user", "content": query}]})
+    return result["messages"][-1].content
+
+
+async def main() -> None:
+    agent = await build_agent()
 
     print("IT Helpdesk Agent. Type 'exit' to quit.\n")
     while True:
-        user_input = input("You: ").strip()
+        # Read on a worker thread. On Windows, blocking the main
+        # thread on input() after asyncio has spawned a stdio
+        # subprocess can leave the console's stdin handle returning
+        # EOF on the next read.
+        user_input = (await asyncio.to_thread(input, "You: ")).strip()
         if user_input.lower() in {"exit", "quit"}:
             break
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": user_input}]}
-        )
-        reply = result["messages"][-1].content
+        reply = await ask(agent, user_input)
         print(f"Agent: {reply}\n")
 
 
