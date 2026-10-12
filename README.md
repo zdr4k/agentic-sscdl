@@ -32,15 +32,6 @@ ollama pull qwen2.5:7b-instruct
 python agent/agent.py
 ```
 
-### Model backend
-
-The same code picks its model through an environment variable:
-
-| `LLM_BACKEND` | Model | Use |
-|---|---|---|
-| (unset) | Ollama `qwen2.5:7b-instruct` | Local, no API key. |
-| `github` | GitHub Models `openai/gpt-4o-mini` | CI; uses the job's `GITHUB_TOKEN` (`GITHUB_TOKEN` must be set). |
-
 ## Security pipeline
 
 | Workflow | Type | What it does | Trigger |
@@ -50,14 +41,15 @@ The same code picks its model through an environment variable:
 | `sca.yml` | SCA | Snyk on the `requirements.txt` dependencies. Results go to Code Scanning (SARIF). | PR touching `requirements.txt`, weekly |
 | `zizmor.yml` | CI lint | Analyzes workflows for bad practices (permissions, injection, unpinned actions). | PR |
 | `mcp-scan.yml` | MCP scan | Snyk Agent Scan on the MCP server's tools. | PR touching `mcp/**` |
-| `promptfoo.yml` | DAST | Two jobs: attacks the MCP tool directly and red-teams the agent. | PR touching `mcp/**`, `agent/**`, `promptfoo*.yaml` |
+| `promptfoo.yml` | DAST | Attacks the MCP tool directly with adversarial payloads, deterministic, no LLM. | PR touching `mcp/**`, `promptfooconfig.yaml` |
 
 Practices applied in the workflows: `permissions: {}` at the top level with least-privilege permissions per job, `persist-credentials: false` on checkout, and actions pinned by SHA.
+
+There used to be a second `promptfoo.yml` job that red-teamed the live agent in CI via GitHub Models, using the job's own `GITHUB_TOKEN` in place of an API key. GitHub Models was retired on 2026-07-30; that endpoint now returns a bare `OK` for every request. Running a 7B model on the runner's CPU instead would cost minutes per PR for a signal that's non-deterministic by nature anyway, so that red-team layer (`promptfoo.agent.yaml`, `agent/redteam_provider.py`) stays a local-only tool instead of a CI job, see below.
 
 ### Required secrets
 
 - `SNYK_TOKEN`: used by the Snyk workflows.
-- `GITHUB_TOKEN`: already available in every job; the agent job only needs the `models: read` permission.
 
 ## Running the security tests locally
 
@@ -67,7 +59,7 @@ python scripts/create_db.py
 # 1. Direct attack on the MCP tool (no LLM)
 npx -y promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
-# 2. Red team of the real agent (needs Ollama or LLM_BACKEND=github)
+# 2. Red team of the real agent (local-only, needs Ollama; see above)
 npx -y promptfoo@latest eval -c promptfoo.agent.yaml --no-cache
 
 # 3. MCP server scan

@@ -3,4 +3,3 @@ langchain
 langchain-mcp-adapters
 langgraph
 langchain-ollama
-langchain-openai

@@ -1,35 +1,24 @@
 """IT helpdesk agent.
 
 Spawns the MCP server as a subprocess over stdio, loads its tools,
-and wires them into a LangGraph ReAct agent.
+and wires them into a LangGraph ReAct agent. Backed by a local
+Ollama model, no API key needed, so anyone cloning the repo can run
+it.
 
-Model backend is an environment switch, not a fork: local runs use
-Ollama, free and with no API key, so anyone cloning the repo can try
-it. In CI there's no GPU and no daemon worth standing up, so the
-same agent code points at GitHub Models instead, using the
-GITHUB_TOKEN every Actions job already has.
-
-Local:
+Requires Ollama running locally with the model pulled:
     ollama pull qwen2.5:7b-instruct
     python agent.py
-
-CI (set by the workflow, not by hand):
-    LLM_BACKEND=github GITHUB_TOKEN=... python agent.py
 """
 
 import asyncio
-import os
 import pathlib
 import sys
 
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
-from langchain_openai import ChatOpenAI
 
 OLLAMA_MODEL = "qwen2.5:7b-instruct"
-GITHUB_MODELS_ENDPOINT = "https://models.github.ai/inference"
-GITHUB_MODEL = "openai/gpt-4o-mini"
 
 # Resolved from this file's own location so the script works
 # regardless of which directory you launch python from.
@@ -42,14 +31,7 @@ Only use the tools available to you. Never guess information you can look up.
 """
 
 
-def build_model():
-    if os.environ.get("LLM_BACKEND") == "github":
-        return ChatOpenAI(
-            base_url=GITHUB_MODELS_ENDPOINT,
-            api_key=os.environ["GITHUB_TOKEN"],
-            model=GITHUB_MODEL,
-            temperature=0,
-        )
+def build_model() -> ChatOllama:
     return ChatOllama(model=OLLAMA_MODEL, temperature=0)
 
 
