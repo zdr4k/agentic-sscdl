@@ -43,11 +43,8 @@ def search_tickets(keyword: str) -> list[dict]:
     Returns matching tickets with id, requester, subject, and status.
     """
     conn = sqlite3.connect(DB_PATH)
-    query = (
-        f"SELECT id, requester, subject, status "
-        f"FROM tickets WHERE subject LIKE '%{keyword}%'"
-    )
-    rows = conn.execute(query).fetchall()
+    query = "SELECT id, requester, subject, status FROM tickets WHERE subject LIKE ?"
+    rows = conn.execute(query, (f"%{keyword}%",)).fetchall()
     conn.close()
     return [
         {"id": r[0], "requester": r[1], "subject": r[2], "status": r[3]}
