@@ -10,6 +10,7 @@ permissions: {}
 jobs:
   agent-scan:
     runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
     steps:
@@ -24,14 +25,51 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          if [ -f mcp/requirements.txt ]; then
+            pip install -r mcp/requirements.txt
+          fi
+          # Garante o fastmcp usado por mcp/server.py mesmo se nao estiver listado
+          python -c "import fastmcp" 2>/dev/null || pip install fastmcp
 
       - name: Seed the database
         run: python scripts/create_db.py
+
+      - name: Pin the MCP server command to this job's python
+        # uvx runs snyk-agent-scan inside its own short-lived, isolated
+        # venv. When that process spawns the MCP server via a bare
+        # "python" (PATH lookup), it resolves to uvx's venv, not the
+        # one where fastmcp was just installed above. Rewriting the
+        # config to an absolute interpreter path sidesteps PATH
+        # entirely, so it can't get shadowed either way.
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          config_path = pathlib.Path("mcp-scan-config.json")
+          config = json.loads(config_path.read_text())
+          config["mcpServers"]["it-helpdesk"]["command"] = sys.executable
+          config_path.write_text(json.dumps(config, indent=2) + "\n")
+          PY
+
       - name: Set up uv
         uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
 
+      - name: Check Snyk token
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "::error::SNYK_TOKEN esta vazio. Verifique o secret do repositorio ou do environment."
+            exit 1
+          fi
+
       - name: Run Snyk Agent Scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           uvx snyk-agent-scan@latest --ci \
             --dangerously-run-mcp-servers \
